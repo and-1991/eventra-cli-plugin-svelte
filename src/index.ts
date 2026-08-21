@@ -4,7 +4,7 @@ import type { CliPluginSvelte } from "./types";
 export function createCliPluginSvelte(): CliPluginSvelte {
   return {
     id: "svelte",
-    version: "1.0.0",
+    version: "1.0.1",
     includeGlobs: ["**/*.svelte"],
     staticSinks: [
       {

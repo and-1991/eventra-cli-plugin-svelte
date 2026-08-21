@@ -82,6 +82,8 @@ Handled exactly like a regular `.ts` file — direct SDK calls, function wrapper
 
 The expression is copied as-is into the same module scope as the script. If it resolves to a real script-level constant, the event name is detected normally; otherwise it's reported as a **dynamic occurrence** (same mechanism as `tracker.track(someVariable)` in plain TypeScript) instead of being silently dropped.
 
+Only the plain literal (`event="..."`) and expression (`event={...}`) forms are supported. Unlike `@eventra_dev/cli-plugin-astro`, this plugin does not support a JSX-style `{event}` shorthand for `event={event}`, and an interpolated string like `event="a-{b}"` is silently ignored rather than treated as a binding - write `` event={`a-${b}`} `` instead if you need that.
+
 `event` is recognized on any tag — plain elements, components, `{#if}`/`{:else if}`/`{:else}`, `{#each}`, `{#await}`/`{:then}`/`{:catch}`, `{#key}`, and slot content — since the plugin walks the whole template rather than special-casing specific block types.
 
 ---
