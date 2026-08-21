@@ -1,0 +1,57 @@
+{
+  "name": "@eventra_dev/cli-plugin-svelte",
+  "version": "1.0.0",
+  "description": "Eventra CLI plugin — extract track() calls from Svelte (.svelte) files",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/and-1991/eventra-cli-plugin-svelte"
+  },
+  "homepage": "https://eventra.dev",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.7"
+  },
+  "keywords": [
+    "eventra",
+    "eventra-cli",
+    "svelte",
+    "sveltekit",
+    "sfc",
+    "static-analysis",
+    "analytics",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
