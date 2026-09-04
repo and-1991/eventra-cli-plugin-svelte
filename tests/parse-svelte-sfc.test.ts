@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import pkg from "../package.json";
 import { createCliPluginSvelte } from "../src/index";
 import { buildScriptModule, parseSvelteSfc, scriptVirtualPath } from "../src/parse-svelte-sfc";
 
@@ -256,6 +257,7 @@ describe("createCliPluginSvelte", () => {
     expect(plugin.match("App.svelte")).toBe(true);
     expect(plugin.match("App.ts")).toBe(false);
     expect(plugin.includeGlobs).toContain("**/*.svelte");
+    expect(plugin.version).toBe(pkg.version);
     expect(plugin.staticSinks?.[0]?.callee).toBe("__eventra_svelte_template_event__");
 
     const result = await plugin.transform({ path: "/project/Checkout.svelte", source });

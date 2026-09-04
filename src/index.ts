@@ -1,10 +1,11 @@
+import pkg from "../package.json";
 import { transformSvelteSfc } from "./transform";
 import type { CliPluginSvelte } from "./types";
 
 export function createCliPluginSvelte(): CliPluginSvelte {
   return {
     id: "svelte",
-    version: "1.0.1",
+    version: pkg.version,
     includeGlobs: ["**/*.svelte"],
     staticSinks: [
       {
