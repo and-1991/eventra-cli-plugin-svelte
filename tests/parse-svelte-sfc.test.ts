@@ -276,3 +276,19 @@ describe("createCliPluginSvelte", () => {
     expect(result.modules[0]?.content.trim()).toBe("export {}");
   });
 });
+
+describe("event names with spaces and colons", () => {
+  it("keeps the literal verbatim and quotes it safely in the virtual module", () => {
+    const parsed = parseSvelteSfc(
+      `<button event="App: User Sign Up">a</button><button event='Say "Hi" Now'>b</button>`,
+      "/virtual/Spaced.svelte",
+    );
+    expect(parsed.templateEvents).toEqual([
+      { kind: "literal", value: "App: User Sign Up" },
+      { kind: "literal", value: 'Say "Hi" Now' },
+    ]);
+    const module = buildScriptModule(parsed);
+    expect(module).toContain('__eventra_svelte_template_event__("App: User Sign Up");');
+    expect(module).toContain('__eventra_svelte_template_event__("Say \\"Hi\\" Now");');
+  });
+});
