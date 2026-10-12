@@ -223,14 +223,14 @@ describe("buildScriptModule", () => {
     expect(module).toContain("__eventra_svelte_template_event__(eventName);");
   });
 
-  it("labels a context=module block in its header comment", () => {
+  it("keeps a context=module block's code in the module", () => {
     const parsed = parseSvelteSfc(
       '<script context="module">export const SHARED = "shared_event";</script>',
       "/virtual/Module.svelte",
     );
     const module = buildScriptModule(parsed);
 
-    expect(module).toContain("// --- svelte script context=module ---");
+    expect(module).toContain('export const SHARED = "shared_event";');
   });
 
   it('adds a @ts-nocheck header for a plain JS script block (no lang="ts")', () => {

@@ -1,6 +1,6 @@
 {
   "name": "@eventra_dev/cli-plugin-svelte",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Eventra CLI plugin — extract track() calls from Svelte (.svelte) files",
   "license": "MIT",
   "author": {
@@ -34,7 +34,8 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "svelte": "^5.0.0"

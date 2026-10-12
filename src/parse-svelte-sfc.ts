@@ -1,9 +1,12 @@
 import { parse } from "svelte/compiler";
+import { firstContentLine, placeBlocks } from "./layout";
 
 export interface SvelteScriptBlock {
   readonly lang: string;
   readonly module: boolean;
   readonly content: string;
+  /** 1-based line of the script's first character in the .svelte file. */
+  readonly startLine: number;
 }
 
 /** A single `event="..."` binding found on a tag in the template. */
@@ -23,6 +26,14 @@ interface SvelteScriptNode {
   readonly start: number;
   readonly context: "default" | "module";
   readonly content: { readonly start: number; readonly end: number };
+}
+
+function lineAt(source: string, offset: number): number {
+  let line = 1;
+  for (let i = source.indexOf("\n"); i !== -1 && i < offset; i = source.indexOf("\n", i + 1)) {
+    line++;
+  }
+  return line;
 }
 
 const LANG_RE = /\blang\s*=\s*["']([^"']+)["']/;
@@ -122,12 +133,14 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
   // of which block appears earlier in the source text.
   for (const node of [ast.module, ast.instance]) {
     if (!node) continue;
-    const content = source.slice(node.content.start, node.content.end).trim();
+    const raw = source.slice(node.content.start, node.content.end);
+    const content = raw.trim();
     if (!content) continue;
     scripts.push({
       lang: scriptLang(source, node),
       module: node.context === "module",
       content,
+      startLine: firstContentLine(raw, lineAt(source, node.content.start)),
     });
   }
 
@@ -160,13 +173,11 @@ export function buildScriptModule(parsed: ParsedSvelteSfc): string {
   if (parsed.scripts.length === 0) {
     parts.push("export {}");
   } else {
-    for (const block of parsed.scripts) {
-      const header = [`// --- svelte script${block.module ? " context=module" : ""} ---`];
-      if (block.lang !== "ts" && block.lang !== "tsx") {
-        header.push("// @ts-nocheck");
-      }
-      parts.push([...header, block.content].join("\n"));
-    }
+    // Only a leading `@ts-nocheck` is honoured by TypeScript, so only the
+    // first block decides. Blocks keep their original line numbers.
+    const first = parsed.scripts[0];
+    const noCheck = first.lang !== "ts" && first.lang !== "tsx";
+    parts.push(placeBlocks(parsed.scripts, noCheck ? "// @ts-nocheck" : undefined));
   }
 
   if (parsed.templateEvents.length > 0) {
