@@ -81,6 +81,13 @@ function collectFromAttributes(
       }
       continue;
     }
+    // `use:action={expr}`, `class:name={expr}`, `transition:fn={expr}`, `{...spread}`
+    if (CODE_DIRECTIVES.has(attribute.type)) {
+      if (attribute.expression) {
+        handlers.push(source.slice(attribute.expression.start, attribute.expression.end).trim());
+      }
+      continue;
+    }
     if (attribute.type !== "Attribute" || attribute.name !== "event") continue;
 
     const value = attribute.value;
@@ -110,6 +117,12 @@ function collectFromAttributes(
   }
 }
 
+// directive nodes whose `expression` is plain JS (`bind:` is a variable, `let:` a pattern: not code)
+const CODE_DIRECTIVES = new Set(["Action", "Class", "Transition", "Animation", "Spread"]);
+
+// nodes of the markup itself that hold an expression: `{expr}`, `{@html expr}`, `{#if expr}`...
+const EXPRESSION_NODES = new Set(["MustacheTag", "RawMustacheTag", "ConstTag", "IfBlock", "EachBlock", "AwaitBlock", "KeyBlock"]);
+
 function collectEventBindings(
   source: string,
   root: unknown,
@@ -124,6 +137,20 @@ function collectEventBindings(
     }
 
     const record = node as Record<string, unknown>;
+    const expression = record.expression as { start?: number; end?: number } | undefined;
+    if (
+      typeof record.type === "string" &&
+      EXPRESSION_NODES.has(record.type) &&
+      typeof expression?.start === "number" &&
+      typeof expression.end === "number"
+    ) {
+      handlers.push(source.slice(expression.start, expression.end).trim());
+    }
+    // `{#each items as item (item.id)}`: the key is an expression of its own
+    const key = record.key as { start?: number; end?: number } | undefined;
+    if (record.type === "EachBlock" && typeof key?.start === "number" && typeof key.end === "number") {
+      handlers.push(source.slice(key.start, key.end).trim());
+    }
     if (Array.isArray(record.attributes)) {
       collectFromAttributes(source, record.attributes, out, handlers);
     }
@@ -179,7 +206,8 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
   const templateHandlers: string[] = [];
   collectEventBindings(source, ast.html, templateEvents, templateHandlers);
 
-  return { scripts, templateEvents, templateHandlers, errors: [] };
+  // the same expression is reached from its attribute and from its own node: one copy is enough
+  return { scripts, templateEvents, templateHandlers: [...new Set(templateHandlers)], errors: [] };
 }
 
 /** Map `App.svelte` → `App.svelte.ts` (single virtual TS module for the compiler). */
@@ -218,8 +246,9 @@ export function buildScriptModule(parsed: ParsedSvelteSfc): string {
       `declare function ${TEMPLATE_EVENT_CALLEE}(name: string): void;`,
       "function __eventraSvelteTemplate() {",
       // inline handlers are emitted as plain expression statements, so the
-      // calls inside them go through the same detection as script code
-      ...parsed.templateHandlers.map((expression) => `  (${expression});`),
+      // calls inside them go through the same detection as script code; the
+      // closing paren sits on its own line, so a trailing `// comment` cannot swallow it
+      ...parsed.templateHandlers.map((expression) => `  (${expression}\n  );`),
       ...parsed.templateEvents.map((binding) =>
         binding.kind === "literal"
           ? `  ${TEMPLATE_EVENT_CALLEE}("${escapeString(binding.value)}");`

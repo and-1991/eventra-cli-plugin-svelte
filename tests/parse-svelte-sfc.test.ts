@@ -305,9 +305,14 @@ describe("event names with spaces and colons", () => {
       expect(parsed.templateHandlers).toEqual(['() => track("a")', '() => track("b")']);
     });
 
-    it("ignores onxxx attributes that are not a single expression", () => {
-      const parsed = parseSvelteSfc('<div onclick>a</div><div onclick="x()">b</div><div onclick="a{b}">c</div>', "/p/A.svelte");
+    it("ignores onxxx attributes that hold no expression of their own", () => {
+      const parsed = parseSvelteSfc('<div onclick>a</div><div onclick="x()">b</div>', "/p/A.svelte");
       expect(parsed.templateHandlers).toEqual([]);
+    });
+
+    it("reads only the interpolated part of a mixed onxxx attribute", () => {
+      const parsed = parseSvelteSfc('<div onclick="a{b}">c</div>', "/p/A.svelte");
+      expect(parsed.templateHandlers).toEqual(["b"]);
     });
 
     it("emits handlers into the virtual module as expression statements", () => {
@@ -315,7 +320,55 @@ describe("event names with spaces and colons", () => {
         "<script>import { track } from './t';</script>\n<button on:click={() => track('x')}>x</button>",
         "/p/A.svelte",
       );
-      expect(buildScriptModule(parsed)).toContain("  (() => track('x'));");
+      expect(buildScriptModule(parsed)).toContain("  (() => track('x')\n  );");
     });
+  });
+});
+
+describe("other template code", () => {
+  const handlers = (markup: string) => parseSvelteSfc(markup, "/p/A.svelte").templateHandlers;
+
+  it("collects `{expr}` text, `{@html expr}` and block expressions", () => {
+    expect(handlers('<p>{a()}</p>{@html b()}{#if c()}x{/if}{#each d() as i}{i}{/each}{#key e()}k{/key}{#await f()}w{/await}')).toEqual([
+      "a()",
+      "b()",
+      "c()",
+      "d()",
+      "i",
+      "e()",
+      "f()",
+    ]);
+  });
+
+  it("collects the expression of use:, class:, transition: and spread, but not bind:", () => {
+    expect(
+      handlers('<div use:act={a()} class:on={b()} transition:fade={c()} {...d()} bind:value={e}>x</div>'),
+    ).toEqual(["a()", "b()", "c()", "d()"]);
+  });
+
+  it("skips a directive that has no expression", () => {
+    expect(handlers("<div use:act>x</div>")).toEqual([]);
+  });
+
+  it("collects expressions inside attribute values, once", () => {
+    expect(handlers('<a class={cls()} href="/p/{id()}" onclick={() => go()}>x</a>')).toEqual(["() => go()", "cls()", "id()"]);
+  });
+
+  it("emits them into the virtual module", () => {
+    const module = buildScriptModule(parseSvelteSfc("<script>import { t } from './t';</script><p>{t('x')}</p>", "/p/A.svelte"));
+    expect(module).toContain("  (t('x')\n  );");
+  });
+
+  it("reads {@const} and the key of an {#each} block", () => {
+    expect(handlers("{#each list() as item (key(item))}{@const label = fmt(item)}{/each}")).toEqual(["list()", "key(item)", "label = fmt(item)"]);
+  });
+
+  it("skips an {#each} without a key", () => {
+    expect(handlers("{#each list as item}{item}{/each}")).toEqual(["list", "item"]);
+  });
+
+  it("marks the generated region so the CLI can tell template code from script lines", () => {
+    const module = buildScriptModule(parseSvelteSfc("<script>import { t } from './t';</script><p>{t('x')}</p>", "/p/A.svelte"));
+    expect(module).toContain("// --- svelte template (auto-generated) ---");
   });
 });
