@@ -19,6 +19,8 @@ export interface TemplateEventBinding {
 export interface ParsedSvelteSfc {
   readonly scripts: readonly SvelteScriptBlock[];
   readonly templateEvents: readonly TemplateEventBinding[];
+  /** Raw expressions of inline handlers in the markup (`on:click={() => track("x")}`, `onclick={...}`), copied verbatim. */
+  readonly templateHandlers: readonly string[];
   readonly errors: readonly string[];
 }
 
@@ -54,8 +56,31 @@ function collectFromAttributes(
   source: string,
   attributes: readonly unknown[],
   out: TemplateEventBinding[],
+  handlers: string[],
 ): void {
-  for (const attribute of attributes as { type: string; name: string; value: unknown }[]) {
+  for (const attribute of attributes as {
+    type: string;
+    name: string;
+    value: unknown;
+    expression?: { start: number; end: number } | null;
+  }[]) {
+    // Svelte 3/4 directive: on:click={handler}. A bare `on:click` (event
+    // forwarding) has no expression.
+    if (attribute.type === "EventHandler") {
+      if (attribute.expression) {
+        handlers.push(source.slice(attribute.expression.start, attribute.expression.end).trim());
+      }
+      continue;
+    }
+    // Svelte 5 event attribute: onclick={handler}
+    if (attribute.type === "Attribute" && /^on[a-z]+$/.test(attribute.name)) {
+      const parts = attribute.value;
+      if (Array.isArray(parts) && parts.length === 1 && parts[0].type === "MustacheTag") {
+        const expr = parts[0].expression as { start: number; end: number };
+        handlers.push(source.slice(expr.start, expr.end).trim());
+      }
+      continue;
+    }
     if (attribute.type !== "Attribute" || attribute.name !== "event") continue;
 
     const value = attribute.value;
@@ -85,7 +110,12 @@ function collectFromAttributes(
   }
 }
 
-function collectEventBindings(source: string, root: unknown, out: TemplateEventBinding[]): void {
+function collectEventBindings(
+  source: string,
+  root: unknown,
+  out: TemplateEventBinding[],
+  handlers: string[],
+): void {
   function visit(node: unknown): void {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
@@ -95,7 +125,7 @@ function collectEventBindings(source: string, root: unknown, out: TemplateEventB
 
     const record = node as Record<string, unknown>;
     if (Array.isArray(record.attributes)) {
-      collectFromAttributes(source, record.attributes, out);
+      collectFromAttributes(source, record.attributes, out, handlers);
     }
     for (const key of Object.keys(record)) {
       visit(record[key]);
@@ -118,6 +148,7 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
     return {
       scripts: [],
       templateEvents: [],
+      templateHandlers: [],
       // svelte/compiler's parse() only ever throws Error instances (its
       // CompileError subclasses Error) — the String(error) fallback can't be
       // reached without hand-crafting a `throw "non-error value"` inside the
@@ -145,9 +176,10 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
   }
 
   const templateEvents: TemplateEventBinding[] = [];
-  collectEventBindings(source, ast.html, templateEvents);
+  const templateHandlers: string[] = [];
+  collectEventBindings(source, ast.html, templateEvents, templateHandlers);
 
-  return { scripts, templateEvents, errors: [] };
+  return { scripts, templateEvents, templateHandlers, errors: [] };
 }
 
 /** Map `App.svelte` → `App.svelte.ts` (single virtual TS module for the compiler). */
@@ -180,11 +212,14 @@ export function buildScriptModule(parsed: ParsedSvelteSfc): string {
     parts.push(placeBlocks(parsed.scripts, noCheck ? "// @ts-nocheck" : undefined));
   }
 
-  if (parsed.templateEvents.length > 0) {
+  if (parsed.templateEvents.length > 0 || parsed.templateHandlers.length > 0) {
     const lines = [
       "// --- svelte template (auto-generated) ---",
       `declare function ${TEMPLATE_EVENT_CALLEE}(name: string): void;`,
       "function __eventraSvelteTemplate() {",
+      // inline handlers are emitted as plain expression statements, so the
+      // calls inside them go through the same detection as script code
+      ...parsed.templateHandlers.map((expression) => `  (${expression});`),
       ...parsed.templateEvents.map((binding) =>
         binding.kind === "literal"
           ? `  ${TEMPLATE_EVENT_CALLEE}("${escapeString(binding.value)}");`

@@ -86,6 +86,15 @@ Only the plain literal (`event="..."`) and expression (`event={...}`) forms are 
 
 `event` is recognized on any tag — plain elements, components, `{#if}`/`{:else if}`/`{:else}`, `{#each}`, `{#await}`/`{:then}`/`{:catch}`, `{#key}`, and slot content — since the plugin walks the whole template rather than special-casing specific block types.
 
+### Template - inline event handlers
+
+```svelte
+<button on:click={() => trackFeature("checkout_click")}>Pay</button>
+<button onclick={() => trackFeature("checkout_click")}>Pay</button>
+```
+
+Inline handlers in the markup are read too: the Svelte 3/4 `on:event={...}` directive and the Svelte 5 `onevent={...}` attribute. The handler expression is copied into the same module scope as the script, so a call to `track()` or to one of your `functionWrappers` inside it is detected like any other call. A handler that only references a function (`on:click={handleClick}`) is covered through that function's own body in `<script>`; a bare `on:click` (event forwarding) has nothing to read.
+
 ---
 
 ## Configuration
@@ -109,7 +118,7 @@ export interface CliPluginSvelte {
 }
 ```
 
-No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape internally. `.svelte` → one virtual `.svelte.ts` module (compiled script content, then a function wrapping synthetic calls for every template `event="..."` binding). `staticSinks` describes those synthetic calls; the CLI builds its own sink detector from them. See [`@eventra_dev/eventra-cli`'s plugin docs](https://www.npmjs.com/package/@eventra_dev/eventra-cli#plugin-contract-for-authors) for the full external-plugin contract.
+No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape internally. `.svelte` → one virtual `.svelte.ts` module (compiled script content, then a function wrapping synthetic calls for every template `event="..."` binding and the inline handler expressions). `staticSinks` describes those synthetic calls; the CLI builds its own sink detector from them. See [`@eventra_dev/eventra-cli`'s plugin docs](https://www.npmjs.com/package/@eventra_dev/eventra-cli#plugin-contract-for-authors) for the full external-plugin contract.
 
 ---
 
@@ -124,13 +133,14 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**28 unit tests** (vitest), covering:
+**39 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|
 | SFC parsing | `context="module"` + instance merge order, comment safety, syntax-error reporting |
 | Template — literal | Nested elements, `{#if}`/`{:else if}`/`{:else}`, `{#each}`, `{#await}`/`{:then}`/`{:catch}`, `{#key}`, slots, components |
 | Template — dynamic | Raw expression passthrough, resolution through the merged script scope |
+| Template - inline handlers | `on:click={...}` and `onclick={...}` expressions, bare `on:click` ignored, virtual module output |
 | Edge cases | Empty `event=""`, boolean-shorthand `event`, interpolated `event="a-{b}"` |
 | Svelte 5 runes | `$props()` destructuring passes through without special-casing |
 | Virtual module output | Single combined `.svelte.ts`, export stub when script/template are empty |

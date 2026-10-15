@@ -291,4 +291,31 @@ describe("event names with spaces and colons", () => {
     expect(module).toContain('__eventra_svelte_template_event__("App: User Sign Up");');
     expect(module).toContain('__eventra_svelte_template_event__("Say \\"Hi\\" Now");');
   });
+  describe("inline handlers in markup", () => {
+    it("collects on:click expressions (Svelte 3/4) and onclick attributes (Svelte 5)", () => {
+      const parsed = parseSvelteSfc(
+        [
+          "<script>import { track } from './t';</script>",
+          '<button on:click={() => track("a")}>a</button>',
+          '<button onclick={() => track("b")}>b</button>',
+          "<button on:click>forwarded</button>",
+        ].join("\n"),
+        "/p/A.svelte",
+      );
+      expect(parsed.templateHandlers).toEqual(['() => track("a")', '() => track("b")']);
+    });
+
+    it("ignores onxxx attributes that are not a single expression", () => {
+      const parsed = parseSvelteSfc('<div onclick>a</div><div onclick="x()">b</div><div onclick="a{b}">c</div>', "/p/A.svelte");
+      expect(parsed.templateHandlers).toEqual([]);
+    });
+
+    it("emits handlers into the virtual module as expression statements", () => {
+      const parsed = parseSvelteSfc(
+        "<script>import { track } from './t';</script>\n<button on:click={() => track('x')}>x</button>",
+        "/p/A.svelte",
+      );
+      expect(buildScriptModule(parsed)).toContain("  (() => track('x'));");
+    });
+  });
 });
