@@ -38,7 +38,8 @@ function lineAt(source: string, offset: number): number {
   return line;
 }
 
-const LANG_RE = /\blang\s*=\s*["']([^"']+)["']/;
+// Svelte rejects whitespace before the `=`; the leading \s keeps `data-lang="..."` from counting
+const LANG_RE = /\slang=\s*["']([^"']+)["']/;
 
 function scriptLang(source: string, node: SvelteScriptNode): string {
   const openTag = source.slice(node.start, node.content.start);
@@ -68,23 +69,24 @@ function collectFromAttributes(
     // forwarding) has no expression.
     if (attribute.type === "EventHandler") {
       if (attribute.expression) {
-        handlers.push(source.slice(attribute.expression.start, attribute.expression.end).trim());
+        handlers.push(source.slice(attribute.expression.start, attribute.expression.end));
       }
       continue;
     }
-    // Svelte 5 event attribute: onclick={handler}
+    // Svelte 5 event attribute: onclick={handler}. The expression is also reached through its own
+    // MustacheTag, but reading it here keeps it ahead of the other attributes' expressions.
     if (attribute.type === "Attribute" && /^on[a-z]+$/.test(attribute.name)) {
       const parts = attribute.value;
       if (Array.isArray(parts) && parts.length === 1 && parts[0].type === "MustacheTag") {
         const expr = parts[0].expression as { start: number; end: number };
-        handlers.push(source.slice(expr.start, expr.end).trim());
+        handlers.push(source.slice(expr.start, expr.end));
       }
       continue;
     }
     // `use:action={expr}`, `class:name={expr}`, `transition:fn={expr}`, `{...spread}`
     if (CODE_DIRECTIVES.has(attribute.type)) {
       if (attribute.expression) {
-        handlers.push(source.slice(attribute.expression.start, attribute.expression.end).trim());
+        handlers.push(source.slice(attribute.expression.start, attribute.expression.end));
       }
       continue;
     }
@@ -110,7 +112,7 @@ function collectFromAttributes(
       if (part.type === "MustacheTag") {
         out.push({
           kind: "dynamic",
-          value: source.slice(part.expression.start, part.expression.end).trim(),
+          value: source.slice(part.expression.start, part.expression.end),
         });
       }
     }
@@ -131,11 +133,6 @@ function collectEventBindings(
 ): void {
   function visit(node: unknown): void {
     if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
-
     const record = node as Record<string, unknown>;
     const expression = record.expression as { start?: number; end?: number } | undefined;
     if (
@@ -144,12 +141,12 @@ function collectEventBindings(
       typeof expression?.start === "number" &&
       typeof expression.end === "number"
     ) {
-      handlers.push(source.slice(expression.start, expression.end).trim());
+      handlers.push(source.slice(expression.start, expression.end));
     }
     // `{#each items as item (item.id)}`: the key is an expression of its own
     const key = record.key as { start?: number; end?: number } | undefined;
     if (record.type === "EachBlock" && typeof key?.start === "number" && typeof key.end === "number") {
-      handlers.push(source.slice(key.start, key.end).trim());
+      handlers.push(source.slice(key.start, key.end));
     }
     if (Array.isArray(record.attributes)) {
       collectFromAttributes(source, record.attributes, out, handlers);
