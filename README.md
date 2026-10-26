@@ -104,9 +104,11 @@ The prop does not have to be named `event`. If a component sends one of its prop
 ```svelte
 <!-- Button.svelte -->
 <script>
+  import { Eventra } from '@eventra_dev/eventra-sdk';
+  const tracker = new Eventra({ apiKey: 'YOUR_KEY' });
   export let analyticsName;
 </script>
-<button on:click={() => trackEvent(analyticsName)}><slot /></button>
+<button on:click={() => tracker.track(analyticsName)}><slot /></button>
 
 <!-- Page.svelte -->
 <script>
