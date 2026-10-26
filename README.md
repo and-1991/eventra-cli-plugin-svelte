@@ -119,7 +119,15 @@ The prop does not have to be named `event`. If a component sends one of its prop
 
 Works with Svelte 4 props (`export let`, with defaults) and Svelte 5 (`let { a, b = 1 } = $props()` and `const props = $props()`), for default imports of `.svelte` files, `prop="text"`, `prop={expr}` and the `{prop}` shorthand, and follows a prop handed on to another component. Props the component never tracks are not events; a value that comes from an `{#each}` variable is reported as a dynamic occurrence.
 
-Not followed: spreads (`{...props}`), directives, mixed values (`y="p-{x}"`), `<svelte:component this={X}>`, `$$props` and `$$restProps`, and components with an `export default`, an `export *` or an import after code in the instance script (those are scanned as before).
+**Not followed** (those components are scanned as before, so nothing is lost, but a prop that only they use is not found):
+
+- Spreads (`{...props}`) and directives on the component.
+- Mixed attribute values (`y="p-{x}"`).
+- `<svelte:component this={X}>`.
+- `$$props` and `$$restProps`.
+- A component whose instance script has an `export default`, an `export *`, an `export let { a } = ...` or an import after other code.
+
+A value the CLI cannot resolve to a plain string (an `{#each}` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event. The same list shows the tracking call inside the component itself, one line per component, because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
 
 ### Template - other code
 
