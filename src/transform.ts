@@ -21,7 +21,7 @@ export async function transformSvelteSfc(
     modules: [
       {
         path: scriptVirtualPath(input.path),
-        content: buildScriptModule(parsed),
+        content: buildScriptModule(parsed, input.path),
       },
     ],
   };

@@ -1,4 +1,8 @@
 import { parse } from "svelte/compiler";
+import path from "node:path";
+
+import { scriptBindings, wrapInstanceScript } from "./component";
+import type { ScriptProgram } from "./component";
 import { firstContentLine, placeBlocks } from "./layout";
 
 export interface SvelteScriptBlock {
@@ -16,19 +20,38 @@ export interface TemplateEventBinding {
   readonly value: string;
 }
 
+/** A prop passed to a child component in the template: `track="x"` (literal), `track={expr}` / `{track}` (expression). */
+export interface TemplateComponentProp {
+  readonly name: string;
+  readonly kind: "literal" | "expression";
+  readonly value: string;
+}
+
+/** A component element with the props written on it. Whether it is an imported component depends on the script's imports. */
+export interface TemplateComponentUsage {
+  readonly tag: string;
+  readonly props: readonly TemplateComponentProp[];
+}
+
 export interface ParsedSvelteSfc {
   readonly scripts: readonly SvelteScriptBlock[];
   readonly templateEvents: readonly TemplateEventBinding[];
   /** Raw expressions of inline handlers in the markup (`on:click={() => track("x")}`, `onclick={...}`), copied verbatim. */
   readonly templateHandlers: readonly string[];
+  /** Every component element in the template that carries props, for the ones that turn out to be imported components. */
+  readonly componentUsages?: readonly TemplateComponentUsage[];
   readonly errors: readonly string[];
 }
 
 interface SvelteScriptNode {
   readonly start: number;
   readonly context: "default" | "module";
-  readonly content: { readonly start: number; readonly end: number };
+  readonly content: { readonly start: number; readonly end: number; readonly body: ScriptProgram["body"] };
 }
+
+// The statements of each script block, kept beside the parse result instead of in it, for the step that
+// turns a component's props into a function's parameters.
+const programs = new WeakMap<SvelteScriptBlock, ScriptProgram>();
 
 function lineAt(source: string, offset: number): number {
   let line = 1;
@@ -125,11 +148,28 @@ const CODE_DIRECTIVES = new Set(["Action", "Class", "Transition", "Animation", "
 // nodes of the markup itself that hold an expression: `{expr}`, `{@html expr}`, `{#if expr}`...
 const EXPRESSION_NODES = new Set(["MustacheTag", "RawMustacheTag", "ConstTag", "IfBlock", "EachBlock", "AwaitBlock", "KeyBlock"]);
 
+/** `<Button track="x" label={y} {shorthand} />`: the props written on a component element; spreads, directives and mixed text and `{}` values are not props this can read. */
+function collectComponentProps(source: string, tag: string, attributes: readonly unknown[], usages: TemplateComponentUsage[]): void {
+  const props: TemplateComponentProp[] = [];
+  for (const attribute of attributes as { type: string; name: string; value: unknown }[]) {
+    if (attribute.type !== "Attribute" || !Array.isArray(attribute.value) || attribute.value.length !== 1) continue;
+    // a one-part value is Text, a MustacheTag (`x={expr}`) or an AttributeShorthand (`{x}`); the last two carry an expression
+    const part = attribute.value[0] as { type: string; data: string; expression: { start: number; end: number } };
+    props.push(
+      part.type === "Text"
+        ? { name: attribute.name, kind: "literal", value: part.data }
+        : { name: attribute.name, kind: "expression", value: source.slice(part.expression.start, part.expression.end) },
+    );
+  }
+  if (props.length > 0) usages.push({ tag, props });
+}
+
 function collectEventBindings(
   source: string,
   root: unknown,
   out: TemplateEventBinding[],
   handlers: string[],
+  usages: TemplateComponentUsage[],
 ): void {
   function visit(node: unknown): void {
     if (!node || typeof node !== "object") return;
@@ -150,6 +190,9 @@ function collectEventBindings(
     }
     if (Array.isArray(record.attributes)) {
       collectFromAttributes(source, record.attributes, out, handlers);
+      if (record.type === "InlineComponent" && typeof record.name === "string") {
+        collectComponentProps(source, record.name, record.attributes, usages);
+      }
     }
     for (const key of Object.keys(record)) {
       visit(record[key]);
@@ -191,20 +234,23 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
     const raw = source.slice(node.content.start, node.content.end);
     const content = raw.trim();
     if (!content) continue;
-    scripts.push({
+    const block: SvelteScriptBlock = {
       lang: scriptLang(source, node),
       module: node.context === "module",
       content,
       startLine: firstContentLine(raw, lineAt(source, node.content.start)),
-    });
+    };
+    scripts.push(block);
+    programs.set(block, { body: node.content.body, base: node.content.start + (raw.length - raw.trimStart().length) });
   }
 
   const templateEvents: TemplateEventBinding[] = [];
   const templateHandlers: string[] = [];
-  collectEventBindings(source, ast.html, templateEvents, templateHandlers);
+  const componentUsages: TemplateComponentUsage[] = [];
+  collectEventBindings(source, ast.html, templateEvents, templateHandlers, componentUsages);
 
   // the same expression is reached from its attribute and from its own node: one copy is enough
-  return { scripts, templateEvents, templateHandlers: [...new Set(templateHandlers)], errors: [] };
+  return { scripts, templateEvents, templateHandlers: [...new Set(templateHandlers)], componentUsages, errors: [] };
 }
 
 /** Map `App.svelte` → `App.svelte.ts` (single virtual TS module for the compiler). */
@@ -223,40 +269,97 @@ const TEMPLATE_EVENT_CALLEE = "__eventra_svelte_template_event__";
  * pipeline as any other TS expression; anything that doesn't resolve (e.g. an
  * `{#each}` loop variable) is correctly reported as a dynamic occurrence
  * rather than silently dropped.
+ *
+ * A component that declares props (`export let`, `$props()`) is also exported as a function of them, and
+ * every use of it in another template becomes a call of that function. The prop that reaches a tracking
+ * call is then found by what the component does with it, whatever the prop is called.
  */
-export function buildScriptModule(parsed: ParsedSvelteSfc): string {
+export function buildScriptModule(parsed: ParsedSvelteSfc, filePath = ""): string {
   const parts: string[] = [];
+  const blockPrograms = parsed.scripts.flatMap((block) => {
+    const program = programs.get(block);
+    return program ? [program] : [];
+  });
+  const bindings = scriptBindings(blockPrograms);
 
-  if (parsed.scripts.length === 0) {
+  let scripts = parsed.scripts;
+  let component: string | undefined;
+  // the instance script comes last, and the function it opens stays open to the end of the module
+  const last = parsed.scripts[parsed.scripts.length - 1];
+  const lastProgram = last && programs.get(last);
+  if (last && lastProgram) {
+    const wrapped = wrapInstanceScript(last, lastProgram, componentName(filePath, bindings.declared));
+    if (wrapped) {
+      scripts = [...parsed.scripts.slice(0, -1), { ...last, content: wrapped.code }];
+      component = wrapped.name;
+    }
+  }
+
+  if (scripts.length === 0) {
     parts.push("export {}");
   } else {
     // Only a leading `@ts-nocheck` is honoured by TypeScript, so only the
     // first block decides. Blocks keep their original line numbers.
-    const first = parsed.scripts[0];
+    const first = scripts[0];
     const noCheck = first.lang !== "ts" && first.lang !== "tsx";
-    parts.push(placeBlocks(parsed.scripts, noCheck ? "// @ts-nocheck" : undefined));
+    parts.push(placeBlocks(scripts, noCheck ? "// @ts-nocheck" : undefined));
   }
 
-  if (parsed.templateEvents.length > 0 || parsed.templateHandlers.length > 0) {
-    const lines = [
-      "// --- svelte template (auto-generated) ---",
-      `declare function ${TEMPLATE_EVENT_CALLEE}(name: string): void;`,
-      "function __eventraSvelteTemplate() {",
+  const usages = componentCalls(parsed.componentUsages ?? [], bindings.components);
+  if (parsed.templateEvents.length > 0 || parsed.templateHandlers.length > 0 || usages.length > 0) {
+    const marker = "// --- svelte template (auto-generated) ---";
+    const body = [
       // inline handlers are emitted as plain expression statements, so the
       // calls inside them go through the same detection as script code; the
       // closing paren sits on its own line, so a trailing `// comment` cannot swallow it
       ...parsed.templateHandlers.map((expression) => `  (${expression}\n  );`),
+      ...usages,
       ...parsed.templateEvents.map((binding) =>
         binding.kind === "literal"
           ? `  ${TEMPLATE_EVENT_CALLEE}("${escapeString(binding.value)}");`
           : `  ${TEMPLATE_EVENT_CALLEE}(${binding.value});`,
       ),
-      "}",
     ];
-    parts.push(lines.join("\n"));
+    const declaration = `declare function ${TEMPLATE_EVENT_CALLEE}(name: string): void;`;
+    if (component) {
+      // inside the component function, where its props and script variables are in scope
+      parts[0] = `${parts[0]}\n${[marker, ...body].join("\n")}\n// --- end template ---\n}\nexport default ${component};`;
+      parts.push(declaration);
+    } else {
+      parts.push([marker, declaration, "function __eventraSvelteTemplate() {", ...body, "}"].join("\n"));
+    }
+  } else if (component) {
+    parts[0] = `${parts[0]}\n}\nexport default ${component};`;
   }
 
   return `${parts.join("\n\n")}\n`;
+}
+
+/** `Button.svelte` -> `Button`: the name the component is reported under, kept clear of the script's own names. */
+function componentName(filePath: string, taken: ReadonlySet<string>): string {
+  const base = path.basename(filePath).replace(/\.svelte$/i, "");
+  const name = base.replace(/(?:^|[^A-Za-z0-9]+)(\w)/g, (_, letter: string) => letter.toUpperCase()).replace(/[^\w$]/g, "");
+  const valid = /^[A-Za-z_$][\w$]*$/.test(name) ? name : "SvelteComponent";
+  return taken.has(valid) ? `${valid}Component` : valid;
+}
+
+const KEY = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * A use of an imported component in the template is a call of that component with its props object:
+ * `<Button track="x" label={text} />` is `Button({ track: "x", label: (text) })`.
+ */
+function componentCalls(usages: readonly TemplateComponentUsage[], components: readonly string[]): string[] {
+  const calls: string[] = [];
+  for (const usage of usages) {
+    if (!components.includes(usage.tag)) continue;
+    const props = usage.props.map((prop) => {
+      const key = KEY.test(prop.name) ? prop.name : `"${escapeString(prop.name)}"`;
+      return `${key}: ${prop.kind === "literal" ? `"${escapeString(prop.value)}"` : `(${prop.value}\n)`}`;
+    });
+    calls.push(`  ${usage.tag}({ ${props.join(", ")} });`);
+  }
+  return calls;
 }
 
 function escapeString(value: string): string {

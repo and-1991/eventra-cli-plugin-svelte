@@ -11,12 +11,14 @@
   "coverageAnalysis": "perTest",
   "mutate": [
     "src/parse-svelte-sfc.ts",
+    "src/component.ts",
     "src/layout.ts"
   ],
   "reporters": [
     "clear-text",
     "progress",
-    "html"
+    "html",
+    "json"
   ],
   "htmlReporter": {
     "fileName": "reports/mutation/mutation.html"

@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-48%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-128%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-svelte?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -97,6 +97,28 @@ Inline handlers in the markup are read too: the Svelte 3/4 `on:event={...}` dire
 
 ---
 
+### Props of a component, whatever they are called
+
+The prop does not have to be named `event`. If a component sends one of its props to a tracking call, every place that uses the component with a value for that prop is an event:
+
+```svelte
+<!-- Button.svelte -->
+<script>
+  export let analyticsName;
+</script>
+<button on:click={() => trackEvent(analyticsName)}><slot /></button>
+
+<!-- Page.svelte -->
+<script>
+  import Button from './Button.svelte';
+</script>
+<Button analyticsName="checkout.cta">Pay</Button>
+```
+
+Works with Svelte 4 props (`export let`, with defaults) and Svelte 5 (`let { a, b = 1 } = $props()` and `const props = $props()`), for default imports of `.svelte` files, `prop="text"`, `prop={expr}` and the `{prop}` shorthand, and follows a prop handed on to another component. Props the component never tracks are not events; a value that comes from an `{#each}` variable is reported as a dynamic occurrence.
+
+Not followed: spreads (`{...props}`), directives, mixed values (`y="p-{x}"`), `<svelte:component this={X}>`, `$$props` and `$$restProps`, and components with an `export default`, an `export *` or an import after code in the instance script (those are scanned as before).
+
 ### Template - other code
 
 Besides handlers, every expression in the markup is read: `{expr}`, `{@html expr}` and `{@const x = expr}`, the expressions of `{#if}`, `{#each}` (and its key), `{#key}` and `{#await}`, the expressions of `use:`, `class:`, `transition:` and `animation:` directives and `{...spread}`, and expressions inside attribute values (`class={cls()}`, `href="/p/{id()}"`). `bind:` directives are variables, not code, and are skipped.
@@ -137,7 +159,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**48 unit tests** (vitest), covering:
+**128 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|
