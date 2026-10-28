@@ -193,4 +193,4 @@ pnpm --filter @eventra_dev/cli-plugin-svelte test:coverage
 
 ## License
 
-MIT, copyright (c) 2026 [and-1991](https://github.com/and-1991). See [LICENSE](LICENSE).
+MIT, copyright (c) 2026 [Yuriy Korolik](https://github.com/and-1991). See [LICENSE](LICENSE).

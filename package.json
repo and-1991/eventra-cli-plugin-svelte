@@ -1,10 +1,10 @@
 {
   "name": "@eventra_dev/cli-plugin-svelte",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Eventra CLI plugin — extract track() calls from Svelte (.svelte) files",
   "license": "MIT",
   "author": {
-    "name": "and-1991",
+    "name": "Yuriy Korolik",
     "url": "https://github.com/and-1991"
   },
   "type": "commonjs",
