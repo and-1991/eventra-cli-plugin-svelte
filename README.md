@@ -93,7 +93,7 @@ Only the plain literal (`event="..."`) and expression (`event={...}`) forms are 
 <button onclick={() => trackFeature("checkout_click")}>Pay</button>
 ```
 
-Inline handlers in the markup are read too: the Svelte 3/4 `on:event={...}` directive and the Svelte 5 `onevent={...}` attribute. The handler expression is copied into the same module scope as the script, so a call to `track()` or to one of your `functionWrappers` inside it is detected like any other call. A handler that only references a function (`on:click={handleClick}`) is covered through that function's own body in `<script>`; a bare `on:click` (event forwarding) has nothing to read.
+Inline handlers in the markup are read too: the Svelte 4 style `on:event={...}` directive and the Svelte 5 `onevent={...}` attribute. The plugin parses with the Svelte 5 compiler (`svelte ^5` is its dependency), which also reads the older syntax; the tests cover both syntaxes, not separate Svelte 3 or 4 installs. The handler expression is copied into the same module scope as the script, so a call to `track()` or to one of your `functionWrappers` inside it is detected like any other call. A handler that only references a function (`on:click={handleClick}`) is covered through that function's own body in `<script>`; a bare `on:click` (event forwarding) has nothing to read.
 
 ---
 
