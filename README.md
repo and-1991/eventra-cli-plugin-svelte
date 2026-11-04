@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-128%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-131%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-svelte?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -82,7 +82,7 @@ Handled exactly like a regular `.ts` file — direct SDK calls, function wrapper
 
 The expression is copied as-is into the same module scope as the script. If it resolves to a real script-level constant, the event name is detected normally; otherwise it's reported as a **dynamic occurrence** (same mechanism as `tracker.track(someVariable)` in plain TypeScript) instead of being silently dropped.
 
-Only the plain literal (`event="..."`) and expression (`event={...}`) forms are supported. Unlike `@eventra_dev/cli-plugin-astro`, this plugin does not support a JSX-style `{event}` shorthand for `event={event}`, and an interpolated string like `event="a-{b}"` is silently ignored rather than treated as a binding - write `` event={`a-${b}`} `` instead if you need that.
+Three forms are read: the literal (`event="..."`), the expression (`event={...}`) and the shorthand `{event}` (the same as `event={event}`). An interpolated string like `event="a-{b}"` is read as the template literal it is (`` `a-${b}` ``): when every `{...}` in it resolves to a constant the event is found, and when not it is reported as a dynamic occurrence, never dropped. A `{...spread}` that happens to carry an `event` is not read.
 
 `event` is recognized on any tag — plain elements, components, `{#if}`/`{:else if}`/`{:else}`, `{#each}`, `{#await}`/`{:then}`/`{:catch}`, `{#key}`, and slot content — since the plugin walks the whole template rather than special-casing specific block types.
 
@@ -121,13 +121,13 @@ Works with Svelte 4 props (`export let`, with defaults) and Svelte 5 (`let { a, 
 
 **Not followed** (those components are scanned as before, so nothing is lost, but a prop that only they use is not found):
 
-- Spreads (`{...props}`) and directives on the component.
+- Directives on the component. A `{...obj}` spread on a component is read, in its place among the props, when `obj` is an object the analysis can see into.
 - Mixed attribute values (`y="p-{x}"`).
 - `<svelte:component this={X}>`.
 - `$$props` and `$$restProps`.
 - A component whose instance script has an `export default`, an `export *`, an `export let { a } = ...` or an import after other code.
 
-A value the CLI cannot resolve to a plain string (an `{#each}` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event. The same list shows the tracking call inside the component itself, one line per component, because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
+A value the CLI cannot resolve to a plain string (an `{#each}` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event, with the reason (`env`, `variable`, `template`, `call`, `expression`). The tracking call inside the component itself is listed apart, under "Inside a wrapper", because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
 
 ### Template - other code
 
@@ -169,7 +169,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**128 unit tests** (vitest), covering:
+**131 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|

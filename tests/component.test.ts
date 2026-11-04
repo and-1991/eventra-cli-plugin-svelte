@@ -102,7 +102,9 @@ describe("buildScriptModule with props", () => {
     expect(text).toContain('  Button({ track: "a\\"b", label: (name\n), name: (name\n) });');
     expect(text).toContain("  Card({ id: (1\n) });");
     expect(text).not.toContain("Other(");
-    expect(text.match(/Button\(/g)).toHaveLength(1);
+    // a spread is a prop source in its place, so the use with `{...rest}` is a call too
+    expect(text).toContain('  Button({ ...(rest\n) });');
+    expect(text.match(/Button\(/g)).toHaveLength(2);
     expect(text).toContain("function __eventraSvelteTemplate() {");
   });
 

@@ -111,10 +111,23 @@ describe("parseSvelteSfc", () => {
     expect(parsed.templateEvents).toHaveLength(0);
   });
 
-  it("ignores an interpolated/mixed event value instead of misreading it as one binding", () => {
+  it("reads an interpolated/mixed event value as the template literal it is", () => {
     const parsed = parseSvelteSfc('<button event="prefix-{suffix}" />', "/Mixed.svelte");
 
-    expect(parsed.templateEvents).toHaveLength(0);
+    expect(parsed.templateEvents).toEqual([{ kind: "dynamic", value: "`prefix-${suffix}`" }]);
+  });
+
+  it("reads the {event} shorthand as event={event}", () => {
+    const parsed = parseSvelteSfc("<script>let event = 'x';</script><button {event} />", "/Shorthand.svelte");
+
+    expect(parsed.templateEvents).toEqual([{ kind: "dynamic", value: "event" }]);
+  });
+
+  it("escapes backticks and backslashes in the text of a mixed value", () => {
+    const parsed = parseSvelteSfc('<button event="a`b\\c${n}" />', "/Escape.svelte");
+
+    expect(parsed.templateEvents).toHaveLength(1);
+    expect(parsed.templateEvents[0].value).toBe("`a\\`b\\\\c$${n}`");
   });
 
   it("captures dynamic event={} bindings as raw expressions instead of dropping them", () => {

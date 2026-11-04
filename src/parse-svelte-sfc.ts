@@ -23,7 +23,8 @@ export interface TemplateEventBinding {
 /** A prop passed to a child component in the template: `track="x"` (literal), `track={expr}` / `{track}` (expression). */
 export interface TemplateComponentProp {
   readonly name: string;
-  readonly kind: "literal" | "expression";
+  /** `spread`: `{...obj}`, whose properties are props in the place it stands among the others (`name` is empty). */
+  readonly kind: "literal" | "expression" | "spread";
   readonly value: string;
 }
 
@@ -116,29 +117,35 @@ function collectFromAttributes(
     if (attribute.type !== "Attribute" || attribute.name !== "event") continue;
 
     const value = attribute.value;
-    // Boolean shorthand (`event`) or an interpolated/mixed value
-    // (`event="a-{b}"`) isn't a single literal or single expression — the
-    // plugin's convention only supports one or the other, so it's skipped.
-    if (!Array.isArray(value) || value.length !== 1) continue;
+    // The boolean shorthand (`event`) has no value at all, so there is no name to read
+    if (!Array.isArray(value) || value.length === 0) continue;
 
-    const part = value[0] as { type: string; data: string; expression: { start: number; end: number } };
-    if (part.type === "Text") {
-      const literal = part.data.trim();
+    const parts = value as { type: string; data: string; expression: { start: number; end: number } }[];
+    if (parts.length === 1 && parts[0].type === "Text") {
+      const literal = parts[0].data.trim();
       if (literal) {
         out.push({ kind: "literal", value: literal });
       }
-    } else {
-      // A single-element attribute value array only ever contains a `Text` or
-      // `MustacheTag` node per Svelte's attribute-value grammar — there is no
-      // third case to fall through to.
-      /* v8 ignore else */
-      if (part.type === "MustacheTag") {
-        out.push({
-          kind: "dynamic",
-          value: source.slice(part.expression.start, part.expression.end),
-        });
-      }
+      continue;
     }
+    // `event={expr}` and the shorthand `{event}` (which is `event={event}`) are a single expression
+    if (parts.length === 1) {
+      /* v8 ignore else */
+      if (parts[0].type === "MustacheTag" || parts[0].type === "AttributeShorthand") {
+        out.push({ kind: "dynamic", value: source.slice(parts[0].expression.start, parts[0].expression.end) });
+      }
+      continue;
+    }
+    // `event="a-{b}"`: text and expressions mixed, read as the template literal it is. When every
+    // expression resolves, the name is found; when not, it is reported as dynamic, not dropped
+    const template = parts
+      .map((part) =>
+        part.type === "Text"
+          ? part.data.replace(/[\\`]|\$\{/g, (match) => `\\${match}`)
+          : `\${${source.slice(part.expression.start, part.expression.end)}}`,
+      )
+      .join("");
+    out.push({ kind: "dynamic", value: `\`${template}\`` });
   }
 }
 
@@ -148,10 +155,14 @@ const CODE_DIRECTIVES = new Set(["Action", "Class", "Transition", "Animation", "
 // nodes of the markup itself that hold an expression: `{expr}`, `{@html expr}`, `{#if expr}`...
 const EXPRESSION_NODES = new Set(["MustacheTag", "RawMustacheTag", "ConstTag", "IfBlock", "EachBlock", "AwaitBlock", "KeyBlock"]);
 
-/** `<Button track="x" label={y} {shorthand} />`: the props written on a component element; spreads, directives and mixed text and `{}` values are not props this can read. */
+/** `<Button track="x" label={y} {shorthand} />`: the props written on a component element, and `{...obj}` spreads in their place; directives and mixed text and `{}` values are not props this can read. */
 function collectComponentProps(source: string, tag: string, attributes: readonly unknown[], usages: TemplateComponentUsage[]): void {
   const props: TemplateComponentProp[] = [];
-  for (const attribute of attributes as { type: string; name: string; value: unknown }[]) {
+  for (const attribute of attributes as { type: string; name: string; value: unknown; expression?: { start: number; end: number } }[]) {
+    if (attribute.type === "Spread" && attribute.expression) {
+      props.push({ name: "", kind: "spread", value: source.slice(attribute.expression.start, attribute.expression.end) });
+      continue;
+    }
     if (attribute.type !== "Attribute" || !Array.isArray(attribute.value) || attribute.value.length !== 1) continue;
     // a one-part value is Text, a MustacheTag (`x={expr}`) or an AttributeShorthand (`{x}`); the last two carry an expression
     const part = attribute.value[0] as { type: string; data: string; expression: { start: number; end: number } };
@@ -354,6 +365,7 @@ function componentCalls(usages: readonly TemplateComponentUsage[], components: r
   for (const usage of usages) {
     if (!components.includes(usage.tag)) continue;
     const props = usage.props.map((prop) => {
+      if (prop.kind === "spread") return `...(${prop.value}\n)`;
       const key = KEY.test(prop.name) ? prop.name : `"${escapeString(prop.name)}"`;
       return `${key}: ${prop.kind === "literal" ? `"${escapeString(prop.value)}"` : `(${prop.value}\n)`}`;
     });

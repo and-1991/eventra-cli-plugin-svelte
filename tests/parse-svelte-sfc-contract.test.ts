@@ -23,8 +23,16 @@ describe("event= attributes", () => {
     expect(eventsOf(`<a event={  name  }>x</a>`)).toEqual([{ kind: "dynamic", value: "name" }]);
   });
 
-  it("skips a boolean event attribute and a mixed value", () => {
-    expect(eventsOf(`<a event>x</a><a event="a-{b}">y</a><a event="{a}{b}">z</a>`)).toEqual([]);
+  it("skips a boolean event attribute", () => {
+    expect(eventsOf(`<a event>x</a>`)).toEqual([]);
+  });
+
+  it("reads a mixed value as a template literal, with the parts in their order", () => {
+    expect(eventsOf(`<a event="a-{b}">y</a><a event="{a}{b}">z</a><a event="{a}-end">w</a>`)).toEqual([
+      { kind: "dynamic", value: "`a-${b}`" },
+      { kind: "dynamic", value: "`${a}${b}`" },
+      { kind: "dynamic", value: "`${a}-end`" },
+    ]);
   });
 
   it("does not take other attributes for an event", () => {
