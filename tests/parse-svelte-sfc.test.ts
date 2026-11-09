@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import pkg from "../package.json";
 import { createCliPluginSvelte } from "../src/index";
-import { buildScriptModule, parseSvelteSfc, scriptVirtualPath } from "../src/parse-svelte-sfc";
+import { buildScriptModule, describeParseError, parseSvelteSfc, scriptVirtualPath } from "../src/parse-svelte-sfc";
 
 const FIXTURE = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -383,5 +383,49 @@ describe("other template code", () => {
   it("marks the generated region so the CLI can tell template code from script lines", () => {
     const module = buildScriptModule(parseSvelteSfc("<script>import { t } from './t';</script><p>{t('x')}</p>", "/p/A.svelte"));
     expect(module).toContain("// --- svelte template (auto-generated) ---");
+  });
+});
+
+describe("Svelte 5 markup expressions", () => {
+  const handlers = (markup: string) => parseSvelteSfc(`<script>let a = 1;</script>\n${markup}`, "/p/A.svelte").templateHandlers;
+
+  it("reads {@attach expr}", () => {
+    expect(handlers(`<div {@attach track("attach.event")}></div>`)).toContain('track("attach.event")');
+  });
+
+  it("reads the call of {@render fn(arg)}, arguments included", () => {
+    expect(handlers(`{@render item(track("render.arg"))}`)).toContain('item(track("render.arg"))');
+  });
+
+  it("reads a default value in a snippet parameter, and not a plain parameter", () => {
+    const found = handlers(`{#snippet row(x = track("snippet.default"), y)}<p>{x}</p>{/snippet}`);
+    expect(found).toContain('track("snippet.default")');
+    expect(found.some((code) => code === "y")).toBe(false);
+  });
+});
+
+describe("a script that does not parse", () => {
+  it("names the line the compiler points at", () => {
+    const parsed = parseSvelteSfc("<script>\nlet a = ;\n</script>\n<p/>", "/p/A.svelte");
+    expect(parsed.errors).toHaveLength(1);
+    expect(parsed.errors[0]).toMatch(/\(line 2\)$/);
+  });
+
+  it("does not add a line twice, or invent one", () => {
+    const withLine = parseSvelteSfc("<p>{#if}</p>", "/p/B.svelte");
+    expect(withLine.errors).toHaveLength(1);
+    expect((withLine.errors[0].match(/line \d+/g) ?? []).length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("describeParseError", () => {
+  it("adds the line when the error has one and the message does not say it", () => {
+    expect(describeParseError({ message: "Unexpected token", start: { line: 4 } })).toBe("Unexpected token (line 4)");
+  });
+
+  it("leaves the message alone when it names a line already, or when the error has no position", () => {
+    expect(describeParseError({ message: "Bad thing at line 3", start: { line: 3 } })).toBe("Bad thing at line 3");
+    expect(describeParseError({ message: "Unexpected end of input" })).toBe("Unexpected end of input");
+    expect(describeParseError({ message: "No line", start: {} })).toBe("No line");
   });
 });

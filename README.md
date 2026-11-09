@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-131%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-138%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-svelte?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -133,6 +133,18 @@ A value the CLI cannot resolve to a plain string (an `{#each}` variable, a prop 
 
 Besides handlers, every expression in the markup is read: `{expr}`, `{@html expr}` and `{@const x = expr}`, the expressions of `{#if}`, `{#each}` (and its key), `{#key}` and `{#await}`, the expressions of `use:`, `class:`, `transition:` and `animation:` directives and `{...spread}`, and expressions inside attribute values (`class={cls()}`, `href="/p/{id()}"`). `bind:` directives are variables, not code, and are skipped.
 
+## Scripts that do not parse
+
+A script the Svelte compiler cannot parse skips the whole file, and the CLI names the line the compiler points at.
+
+## Svelte 5 markup
+
+Every expression in the markup is read, including `{@attach expr}`, the call of `{@render fn(arg)}` with its arguments, and a default value in a snippet parameter (`{#snippet row(item = track("x"))}`).
+
+## SvelteKit
+
+A SvelteKit project's `tsconfig.json` extends `.svelte-kit/tsconfig.json`, which `svelte-kit sync` generates. A fresh checkout (CI) does not have it, so `$lib/...` imports are not followed and calls through them are missed. Run `npx svelte-kit sync` before `eventra sync` or `eventra check`; the CLI warns when an extended `tsconfig.json` is missing.
+
 ## Configuration
 
 No plugin-specific config — it activates purely by being listed in `eventra.json`'s `plugins` array (see [Installation](#installation)).
@@ -169,7 +181,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**131 unit tests** (vitest), covering:
+**138 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|

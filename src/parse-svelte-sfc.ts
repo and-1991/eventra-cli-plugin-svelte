@@ -153,7 +153,7 @@ function collectFromAttributes(
 const CODE_DIRECTIVES = new Set(["Action", "Class", "Transition", "Animation", "Spread"]);
 
 // nodes of the markup itself that hold an expression: `{expr}`, `{@html expr}`, `{#if expr}`...
-const EXPRESSION_NODES = new Set(["MustacheTag", "RawMustacheTag", "ConstTag", "IfBlock", "EachBlock", "AwaitBlock", "KeyBlock"]);
+const EXPRESSION_NODES = new Set(["MustacheTag", "RawMustacheTag", "ConstTag", "IfBlock", "EachBlock", "AwaitBlock", "KeyBlock", "AttachTag", "RenderTag"]);
 
 /** `<Button track="x" label={y} {shorthand} />`: the props written on a component element, and `{...obj}` spreads in their place; directives and mixed text and `{}` values are not props this can read. */
 function collectComponentProps(source: string, tag: string, attributes: readonly unknown[], usages: TemplateComponentUsage[]): void {
@@ -199,6 +199,15 @@ function collectEventBindings(
     if (record.type === "EachBlock" && typeof key?.start === "number" && typeof key.end === "number") {
       handlers.push(source.slice(key.start, key.end));
     }
+    // `{#snippet row(item = track("x"))}`: a default value in a parameter is code that runs
+    if (record.type === "SnippetBlock" && Array.isArray(record.parameters)) {
+      for (const parameter of record.parameters as { type: string; right?: { start?: number; end?: number } }[]) {
+        const value = parameter.right;
+        if (parameter.type === "AssignmentPattern" && typeof value?.start === "number" && typeof value.end === "number") {
+          handlers.push(source.slice(value.start, value.end));
+        }
+      }
+    }
     if (Array.isArray(record.attributes)) {
       collectFromAttributes(source, record.attributes, out, handlers);
       if (record.type === "InlineComponent" && typeof record.name === "string") {
@@ -211,6 +220,13 @@ function collectEventBindings(
   }
 
   visit(root);
+}
+
+/** The compiler's message with the line it points at: without it a broken script only says the file is broken. */
+export function describeParseError(error: unknown): string {
+  // parse() only throws Error instances (its CompileError subclasses Error)
+  const { message, start } = error as { message: string; start?: { line?: number } };
+  return start?.line !== undefined && !/\bline \d+\b/.test(message) ? `${message} (line ${start.line})` : message;
 }
 
 /** Parse a Svelte SFC via the real `svelte/compiler` parser (handles comments, control-flow blocks, malformed markup, etc). */
@@ -232,7 +248,7 @@ export function parseSvelteSfc(source: string, filePath: string): ParsedSvelteSf
       // reached without hand-crafting a `throw "non-error value"` inside the
       // compiler itself. Defensive-only.
       /* v8 ignore next */
-      errors: [error instanceof Error ? error.message : String(error)],
+      errors: [describeParseError(error)],
     };
   }
 
