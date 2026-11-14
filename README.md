@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-svelte"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-svelte.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-138%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-139%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-svelte?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -20,7 +20,7 @@ Official [**Eventra CLI**](https://www.npmjs.com/package/@eventra_dev/eventra-cl
 
 ## Overview
 
-The CLI core is framework-agnostic and only walks `.ts`/`.tsx`/`.js`/`.jsx`. This plugin teaches it `.svelte`: it parses each component with the real Svelte compiler ([`svelte/compiler`](https://www.npmjs.com/package/svelte)) — not a regex — and hands the CLI a single virtual TypeScript module per file, so every existing detection rule (direct SDK calls, function wrappers, cross-file propagation, dynamic-name reporting) applies to Svelte code without any Svelte-specific case in the core engine.
+The CLI core is framework-agnostic and only walks TypeScript and JavaScript files (`.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`). This plugin teaches it `.svelte`: it parses each component with the real Svelte compiler ([`svelte/compiler`](https://www.npmjs.com/package/svelte)) - not a regex - and hands the CLI a single virtual TypeScript module per file, so every existing detection rule (direct SDK calls, function wrappers, cross-file propagation, dynamic-name reporting) applies to Svelte code without any Svelte-specific case in the core engine.
 
 Svelte and SvelteKit `.svelte` files are handled the same way — SvelteKit routes/layouts/components are ordinary Svelte components.
 

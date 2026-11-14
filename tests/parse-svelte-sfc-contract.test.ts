@@ -250,4 +250,12 @@ describe("buildScriptModule: exact text", () => {
     expect(line('say "hi"')).toBe(`  ${CALLEE}("say \\"hi\\"");`);
     expect(line(String.raw`a\"b`)).toBe(`  ${CALLEE}("a\\\\\\"b");`);
   });
+
+  it("escapes a line break, so a name with one is not cut at it", () => {
+    const line = (value: string) =>
+      buildScriptModule(parsed({ templateEvents: [{ kind: "literal", value }] }))
+        .split("\n")
+        .find((l) => l.startsWith(`  ${CALLEE}(`));
+    expect(line("multi\nline\r\tend")).toBe(`  ${CALLEE}("multi\\nline\\r\\tend");`);
+  });
 });
